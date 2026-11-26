@@ -1,0 +1,1532 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SimuMetalurgia | Software de Simulación: Regla de Chvorinov</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Three.js & OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                        mono: ['"JetBrains Mono"', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #f8fafc;
+            color: #0f172a;
+        }
+
+        /* Cuadrícula técnica clara para el visor 3D */
+        .bg-cad-grid {
+            background-color: #f1f5f9;
+            background-image:
+                radial-gradient(circle at 50% 45%, rgba(245, 158, 11, 0.08) 0%, rgba(241, 245, 249, 0) 60%),
+                linear-gradient(to right, rgba(15, 23, 42, 0.05) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(15, 23, 42, 0.05) 1px, transparent 1px);
+            background-size: 100% 100%, 32px 32px, 32px 32px;
+        }
+
+        .bg-hero-grid {
+            background-size: 36px 36px;
+            background-image:
+                linear-gradient(to right, rgba(217, 119, 6, 0.06) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(217, 119, 6, 0.06) 1px, transparent 1px);
+        }
+
+        /* Animaciones */
+        .tab-pane {
+            animation: fadeUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.30); }
+            50% { box-shadow: 0 0 22px 2px rgba(217, 119, 6, 0.25); }
+        }
+        .glow-active {
+            animation: pulseGlow 1.6s ease-in-out;
+        }
+
+        /* Scrollbar claro */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #d97706;
+        }
+
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body class="font-sans antialiased min-h-screen flex flex-col selection:bg-amber-200 selection:text-amber-950">
+
+    <!-- =========================================================
+         ENCABEZADO CONSTANTE Y NAVEGACIÓN PRINCIPAL
+    ========================================================== -->
+    <header class="bg-white/95 backdrop-blur-xl border-b border-slate-200 sticky top-0 z-50 shrink-0 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-col md:flex-row items-center justify-between gap-3">
+            <!-- Marca y Título Constante -->
+            <button type="button" onclick="cambiarSeccion('inicio')" class="flex items-center gap-3.5 text-left group focus:outline-none">
+                <!-- Emblema Oficial SimuMetalurgia: Cuchara vertiendo metal fundido -->
+                <div class="w-11 h-11 shrink-0 group-hover:scale-105 transition-transform drop-shadow-md">
+                    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-full h-full">
+                        <defs>
+                            <linearGradient id="sm-bg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+                                <stop offset="0%" stop-color="#1e293b"/>
+                                <stop offset="100%" stop-color="#020617"/>
+                            </linearGradient>
+                            <linearGradient id="sm-border" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+                                <stop offset="0%" stop-color="#fcd34d"/>
+                                <stop offset="50%" stop-color="#d97706"/>
+                                <stop offset="100%" stop-color="#92400e"/>
+                            </linearGradient>
+                            <radialGradient id="sm-furnace" cx="62%" cy="68%" r="55%">
+                                <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.45"/>
+                                <stop offset="100%" stop-color="#f59e0b" stop-opacity="0"/>
+                            </radialGradient>
+                            <linearGradient id="sm-steel" x1="0" y1="0" x2="1" y2="1">
+                                <stop offset="0%" stop-color="#e2e8f0"/>
+                                <stop offset="45%" stop-color="#64748b"/>
+                                <stop offset="100%" stop-color="#334155"/>
+                            </linearGradient>
+                            <linearGradient id="sm-molten" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="#fef08a"/>
+                                <stop offset="45%" stop-color="#f59e0b"/>
+                                <stop offset="100%" stop-color="#ea580c"/>
+                            </linearGradient>
+                            <filter id="sm-glow" x="-30%" y="-30%" width="160%" height="160%">
+                                <feGaussianBlur stdDeviation="1.8" result="blur"/>
+                                <feMerge>
+                                    <feMergeNode in="blur"/>
+                                    <feMergeNode in="SourceGraphic"/>
+                                </feMerge>
+                            </filter>
+                        </defs>
+
+                        <!-- Escudo squircle metálico con borde biselado dorado -->
+                        <rect x="2" y="2" width="60" height="60" rx="15" fill="url(#sm-bg)" stroke="url(#sm-border)" stroke-width="2.2"/>
+                        <rect x="4.5" y="4.5" width="55" height="55" rx="13" fill="url(#sm-furnace)"/>
+
+                        <!-- Charco de metal fundido y ondas de impacto -->
+                        <ellipse cx="42" cy="52.5" rx="13" ry="3.2" fill="#ea580c" opacity="0.55" filter="url(#sm-glow)"/>
+                        <ellipse cx="42" cy="52" rx="9" ry="2.2" fill="url(#sm-molten)"/>
+                        <ellipse cx="42" cy="51.8" rx="4.5" ry="1.1" fill="#fef9c3"/>
+
+                        <!-- Chorro de metal fundido incandescente -->
+                        <path d="M36.5 29.5 C40.5 31 42.8 36 42.5 51.5" stroke="#f59e0b" stroke-width="4.4" stroke-linecap="round" filter="url(#sm-glow)"/>
+                        <path d="M36.5 29.5 C40.2 31.2 42.3 36.2 42.2 51.2" stroke="#fef08a" stroke-width="1.9" stroke-linecap="round"/>
+
+                        <!-- Cuchara de colada inclinada -->
+                        <g transform="rotate(34 26 26)">
+                            <ellipse cx="26" cy="14" rx="11.5" ry="3.8" fill="#ea580c"/>
+                            <ellipse cx="26" cy="14.5" rx="9" ry="2.4" fill="#fef08a" filter="url(#sm-glow)"/>
+                            <path d="M14.5 14 L16.8 36 C17 38.2 21 39.8 26 39.8 C31 39.8 35 38.2 35.2 36 L37.5 14 Z" fill="url(#sm-steel)" stroke="#1e293b" stroke-width="1"/>
+                            <path d="M15.3 22 C19.5 24 32.5 24 36.7 22" stroke="#cbd5e1" stroke-width="1.8" fill="none"/>
+                            <path d="M16.1 30 C20 31.8 32 31.8 35.9 30" stroke="#94a3b8" stroke-width="1.6" fill="none"/>
+                            <path d="M14.5 14 C18.5 17 33.5 17 37.5 14" stroke="#f8fafc" stroke-width="1.4" fill="none"/>
+                            <circle cx="26" cy="26" r="3" fill="#0f172a" stroke="#f59e0b" stroke-width="1.5"/>
+                        </g>
+
+                        <!-- Chispas de colada -->
+                        <circle cx="48.5" cy="44" r="1.4" fill="#fef08a" class="animate-pulse"/>
+                        <circle cx="34.5" cy="46.5" r="1.1" fill="#fbbf24" class="animate-pulse"/>
+                        <circle cx="51" cy="49" r="1" fill="#fb923c" class="animate-pulse"/>
+                    </svg>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 leading-none">
+                            Regla de <span class="text-amber-600">Chvorinov</span>
+                        </h1>
+                        <span class="hidden sm:inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-amber-100 text-amber-800 border border-amber-200 uppercase tracking-wider">
+                            Fundición
+                        </span>
+                    </div>
+                    <p class="text-[11px] text-slate-500 mt-0.5 font-medium">
+                        SimuMetalurgia • Software de Simulación y Aprendizaje
+                    </p>
+                </div>
+            </button>
+
+            <!-- Botones de Navegación (4 Secciones) -->
+            <nav class="flex flex-wrap justify-center gap-1.5 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
+                <button type="button" id="nav-inicio" onclick="cambiarSeccion('inicio')"
+                    class="px-3.5 py-2 rounded-lg text-xs sm:text-sm bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold shadow-sm transition-all flex items-center gap-1.5">
+                    <i class="fa-solid fa-house"></i><span>Inicio</span>
+                </button>
+                <button type="button" id="nav-teoria" onclick="cambiarSeccion('teoria')"
+                    class="px-3.5 py-2 rounded-lg text-xs sm:text-sm text-slate-600 hover:text-slate-900 hover:bg-white font-medium transition-all flex items-center gap-1.5">
+                    <i class="fa-solid fa-book-open"></i><span>Teoría</span>
+                </button>
+                <button type="button" id="nav-simulador" onclick="cambiarSeccion('simulador')"
+                    class="px-3.5 py-2 rounded-lg text-xs sm:text-sm text-slate-600 hover:text-slate-900 hover:bg-white font-medium transition-all flex items-center gap-1.5">
+                    <i class="fa-solid fa-cube"></i><span>Simulador</span>
+                </button>
+                <button type="button" id="nav-manual" onclick="cambiarSeccion('manual')"
+                    class="px-3.5 py-2 rounded-lg text-xs sm:text-sm text-slate-600 hover:text-slate-900 hover:bg-white font-medium transition-all flex items-center gap-1.5">
+                    <i class="fa-solid fa-circle-question"></i><span>Manual de Uso</span>
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- =========================================================
+         SECCIÓN 1: INICIO
+    ========================================================== -->
+    <section id="seccion-inicio" class="tab-pane flex-1 bg-gradient-to-b from-slate-50 via-white to-slate-100 relative overflow-hidden flex items-center">
+        <div class="absolute inset-0 bg-hero-grid pointer-events-none"></div>
+        <div class="absolute -top-24 left-1/2 -translate-x-1/2 w-[700px] h-[380px] bg-amber-300/20 rounded-full blur-[120px] pointer-events-none"></div>
+        <div class="absolute bottom-0 right-0 w-[380px] h-[380px] bg-sky-300/20 rounded-full blur-[110px] pointer-events-none"></div>
+
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 py-14 sm:py-20 relative z-10 w-full">
+            <div class="text-center max-w-3xl mx-auto">
+                <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white border border-amber-300 text-amber-700 text-xs font-bold tracking-widest uppercase mb-6 shadow-sm">
+                    <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                    Módulo de Ingeniería de Fundición • UIS
+                </div>
+
+                <h2 class="text-3xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-slate-900 leading-[1.12]">
+                    Diseño de Mazarotas y <br class="hidden sm:inline" />
+                    <span class="text-transparent bg-clip-text bg-gradient-to-r from-amber-600 via-orange-500 to-amber-500">
+                        Regla de Chvorinov
+                    </span>
+                </h2>
+
+                <p class="mt-6 text-sm sm:text-base md:text-lg text-slate-600 leading-relaxed">
+                    Herramienta interactiva diseñada para calcular el <strong class="text-slate-900">tiempo total de solidificación</strong> de piezas coladas y dimensionar <strong class="text-slate-900">mazarotas cilíndricas y esféricas</strong> en 3D. Permite trabajar en Sistema Internacional (<span class="font-mono font-bold text-amber-700">cm</span>) y Americano (<span class="font-mono font-bold text-amber-700">in</span>), previniendo defectos por rechupe mediante la igualación térmica entre pieza y alimentador.
+                </p>
+
+                <!-- Ecuación destacada -->
+                <div class="mt-7 inline-flex items-center gap-3 px-5 py-2.5 rounded-2xl bg-white border border-slate-200 font-mono text-sm sm:text-base text-slate-700 shadow-sm">
+                    <span class="text-amber-600 font-bold">T<sub>s</sub></span>
+                    <span>=</span>
+                    <span>C · (V / A)<sup>n</sup></span>
+                    <span class="text-slate-300 mx-1">|</span>
+                    <span class="text-sky-600 font-bold">T<sub>s,maz</sub></span>
+                    <span>=</span>
+                    <span>Q · T<sub>s,pieza</sub></span>
+                </div>
+            </div>
+
+            <!-- 3 Tarjetas / Botones Principales de Navegación -->
+            <div class="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Card Teoría -->
+                <button type="button" onclick="cambiarSeccion('teoria')"
+                    class="group text-left bg-white hover:bg-amber-50/40 border border-slate-200 hover:border-amber-400 rounded-2xl p-6 transition-all duration-300 transform hover:-translate-y-1 shadow-sm hover:shadow-md">
+                    <div class="w-12 h-12 rounded-xl bg-amber-100 border border-amber-200 text-amber-700 flex items-center justify-center text-xl mb-4 group-hover:bg-amber-500 group-hover:text-white transition-colors">
+                        <i class="fa-solid fa-book-open"></i>
+                    </div>
+                    <h3 class="text-lg font-extrabold text-slate-900 mb-2 flex items-center justify-between">
+                        <span>Fundamentación Teórica</span>
+                        <i class="fa-solid fa-arrow-right text-xs text-slate-400 group-hover:text-amber-600 group-hover:translate-x-1 transition-all"></i>
+                    </h3>
+                    <p class="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                        Estudia la termodinámica de la solidificación, curvas de enfriamiento, módulo geométrico (V/A), criterios de alimentación y despejes algebraicos.
+                    </p>
+                </button>
+
+                <!-- Card Simulador (Destacada) -->
+                <button type="button" onclick="cambiarSeccion('simulador')"
+                    class="group text-left bg-gradient-to-b from-amber-50 to-white border-2 border-amber-400 hover:border-amber-500 rounded-2xl p-6 transition-all duration-300 transform hover:-translate-y-1 shadow-md hover:shadow-lg shadow-amber-500/10">
+                    <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 text-white flex items-center justify-center text-xl mb-4 shadow-md shadow-amber-500/25">
+                        <i class="fa-solid fa-cube"></i>
+                    </div>
+                    <h3 class="text-lg font-extrabold text-slate-900 mb-2 flex items-center justify-between">
+                        <span>Abrir Simulador 3D</span>
+                        <i class="fa-solid fa-arrow-right text-xs text-amber-600 group-hover:translate-x-1 transition-all"></i>
+                    </h3>
+                    <p class="text-xs sm:text-sm text-slate-700 leading-relaxed">
+                        Calcula tiempos de solidificación o dimensiona mazarotas en tiempo real con visor 3D interactivo, telemetría KPI y conversión automática de unidades.
+                    </p>
+                </button>
+
+                <!-- Card Manual de Uso -->
+                <button type="button" onclick="cambiarSeccion('manual')"
+                    class="group text-left bg-white hover:bg-sky-50/40 border border-slate-200 hover:border-sky-400 rounded-2xl p-6 transition-all duration-300 transform hover:-translate-y-1 shadow-sm hover:shadow-md">
+                    <div class="w-12 h-12 rounded-xl bg-sky-100 border border-sky-200 text-sky-700 flex items-center justify-center text-xl mb-4 group-hover:bg-sky-500 group-hover:text-white transition-colors">
+                        <i class="fa-solid fa-circle-question"></i>
+                    </div>
+                    <h3 class="text-lg font-extrabold text-slate-900 mb-2 flex items-center justify-between">
+                        <span>Manual de Uso</span>
+                        <i class="fa-solid fa-arrow-right text-xs text-slate-400 group-hover:text-sky-600 group-hover:translate-x-1 transition-all"></i>
+                    </h3>
+                    <p class="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                        Guía paso a paso sobre cómo configurar cada parámetro, usar los controles 3D, interpretar los resultados y evitar errores de cálculo.
+                    </p>
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- =========================================================
+         SECCIÓN 2: TEORÍA
+    ========================================================== -->
+    <section id="seccion-teoria" class="tab-pane hidden flex-1 bg-slate-50 py-10 px-4 sm:px-6">
+        <div class="max-w-5xl mx-auto">
+            <!-- Cabecera de Teoría -->
+            <div class="text-center mb-8">
+                <span class="inline-block px-3 py-1 rounded-full bg-amber-100 border border-amber-200 text-amber-800 text-[11px] font-mono font-bold uppercase tracking-widest mb-3">
+                    Marco Teórico • Fundición de Metales
+                </span>
+                <h2 class="text-2xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+                    Fundamentos de la <span class="text-amber-600">Regla de Chvorinov</span>
+                </h2>
+                <p class="text-slate-600 text-sm mt-2 max-w-2xl mx-auto">
+                    Principios de transferencia de calor, cinética de solidificación y diseño geométrico de mazarotas para garantizar piezas libres de rechupes.
+                </p>
+            </div>
+
+            <!-- Sub-navegación interna de Teoría -->
+            <div class="flex flex-wrap justify-center gap-2 mb-8 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm max-w-2xl mx-auto">
+                <button type="button" id="subtab-fundamentos" onclick="cambiarSubTeoria('fundamentos')"
+                    class="flex-1 min-w-[140px] py-2.5 px-4 rounded-xl text-xs font-bold bg-amber-500 text-white shadow-sm transition-all">
+                    1. Ecuación y Física
+                </button>
+                <button type="button" id="subtab-mazarotas" onclick="cambiarSubTeoria('mazarotas')"
+                    class="flex-1 min-w-[140px] py-2.5 px-4 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all">
+                    2. Diseño de Mazarotas
+                </button>
+                <button type="button" id="subtab-formulario" onclick="cambiarSubTeoria('formulario')"
+                    class="flex-1 min-w-[140px] py-2.5 px-4 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all">
+                    3. Formulario y Despejes
+                </button>
+            </div>
+
+            <!-- SUBSECCIÓN 2.1: FUNDAMENTOS -->
+            <div id="teoria-fundamentos" class="space-y-6">
+                <div class="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-sm">
+                    <h3 class="text-xl font-extrabold text-amber-600 mb-3 flex items-center gap-2.5">
+                        <i class="fa-solid fa-temperature-high"></i>
+                        <span>¿Qué es la Regla de Chvorinov?</span>
+                    </h3>
+                    <p class="text-slate-600 text-sm sm:text-base leading-relaxed">
+                        Formulada por el ingeniero checo Nicolas Chvorinov en 1940, esta ley empírica establece que el <strong class="text-slate-900">tiempo total de solidificación (T<sub>s</sub>)</strong> de una pieza colada depende directamente de su geometría y de la capacidad del molde para extraer calor. Físicamente, el volumen (V) representa la cantidad total de energía térmica (calor sensible + calor latente de fusión) que debe eliminarse, mientras que el área superficial (A) en contacto con el molde representa la interfaz por donde escapa ese calor.
+                    </p>
+
+                    <div class="my-6 p-5 rounded-2xl bg-amber-50/70 border border-amber-200 text-center">
+                        <div class="font-mono text-2xl sm:text-3xl font-extrabold text-slate-900">
+                            <span class="text-amber-600">T<sub>s</sub></span> = C · ( <span class="text-sky-600">V / A</span> )<sup>n</sup>
+                        </div>
+                        <p class="text-xs text-slate-600 mt-2 font-mono">
+                            Módulo de enfriamiento: M = V / A &nbsp;•&nbsp; Exponente típico: n ≈ 2
+                        </p>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                        <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                            <h4 class="font-bold text-slate-900 text-sm mb-1.5">Constante del Molde (C)</h4>
+                            <p class="text-xs text-slate-600 leading-relaxed">
+                                Agrupa las propiedades termofísicas del metal y del molde: densidad, calor latente de fusión, conductividad térmica del molde, calor específico y grado de sobrecalentamiento del vertido. Sus unidades típicas son <span class="font-mono font-bold text-amber-700">min/cm²</span> o <span class="font-mono font-bold text-amber-700">min/in²</span> (cuando n = 2).
+                            </p>
+                        </div>
+                        <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                            <h4 class="font-bold text-slate-900 text-sm mb-1.5">Módulo de Enfriamiento (M = V/A)</h4>
+                            <p class="text-xs text-slate-600 leading-relaxed">
+                                Es una relación estrictamente geométrica con unidades de longitud (<span class="font-mono font-bold text-sky-700">cm</span> o <span class="font-mono font-bold text-sky-700">in</span>). Una pieza delgada con gran área superficial tiene un módulo pequeño y solidifica rápido; una pieza masiva tiene un módulo grande y tarda mucho más en solidificar.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-sm">
+                    <h3 class="text-lg font-extrabold text-slate-900 mb-3 flex items-center gap-2.5">
+                        <i class="fa-solid fa-chart-line text-sky-600"></i>
+                        <span>Etapas Térmicas y Microestructura</span>
+                    </h3>
+                    <p class="text-slate-600 text-sm leading-relaxed mb-4">
+                        Durante el enfriamiento en el molde, el metal líquido atraviesa tres fases críticas que definen la sanidad y propiedades mecánicas finales de la fundición:
+                    </p>
+                    <ul class="space-y-2.5 text-xs sm:text-sm text-slate-600">
+                        <li class="flex items-start gap-2.5">
+                            <i class="fa-solid fa-check text-amber-600 mt-1"></i>
+                            <span><strong class="text-slate-900">Extracción de sobrecalentamiento:</strong> El líquido desciende desde la temperatura de colada hasta la temperatura de liquidus.</span>
+                        </li>
+                        <li class="flex items-start gap-2.5">
+                            <i class="fa-solid fa-check text-amber-600 mt-1"></i>
+                            <span><strong class="text-slate-900">Nucleación y solidificación:</strong> Al alcanzar el subenfriamiento crítico se forman núcleos estables y se libera calor latente (recalescencia), creciendo dendritas hasta completar el cambio de fase.</span>
+                        </li>
+                        <li class="flex items-start gap-2.5">
+                            <i class="fa-solid fa-check text-amber-600 mt-1"></i>
+                            <span><strong class="text-slate-900">Relación con propiedades mecánicas:</strong> Tiempos de solidificación más cortos reducen el espaciamiento entre brazos dendríticos secundarios (SDAS), incrementando la resistencia a la tracción y la ductilidad.</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- SUBSECCIÓN 2.2: DISEÑO DE MAZAROTAS -->
+            <div id="teoria-mazarotas" class="hidden space-y-6">
+                <div class="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-sm">
+                    <h3 class="text-xl font-extrabold text-amber-600 mb-3 flex items-center gap-2.5">
+                        <i class="fa-solid fa-fill-drip"></i>
+                        <span>Función de la Mazarota y Prevención del Rechupe</span>
+                    </h3>
+                    <p class="text-slate-600 text-sm sm:text-base leading-relaxed">
+                        La mayoría de los metales se contraen al pasar del estado líquido al sólido (contracción volumétrica de solidificación). Si no existe un depósito de metal líquido adicional, esta contracción genera cavidades internas llamadas <strong class="text-slate-900">rechupes</strong>. Una <strong class="text-amber-700">mazarota</strong> (o alimentador) es un reservorio conectado a la pieza cuyo objetivo es permanecer líquida por más tiempo que la pieza para alimentarla continuamente.
+                    </p>
+
+                    <div class="my-5 p-4 rounded-xl bg-sky-50 border border-sky-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div>
+                            <span class="text-xs font-bold text-sky-800 uppercase tracking-wider">Criterio de Igualación Térmica</span>
+                            <p class="text-xs text-slate-700 mt-1">Se aplica un factor de seguridad <strong class="text-slate-900">Q &gt; 1</strong> (típicamente 1.20 a 1.30) para asegurar que la mazarota solidifique entre un 20% y 30% después que la pieza.</p>
+                        </div>
+                        <div class="font-mono text-lg font-extrabold text-slate-900 bg-white px-4 py-2.5 rounded-xl border border-sky-200 shrink-0 shadow-sm">
+                            T<sub>s,maz</sub> = Q · T<sub>s,pieza</sub>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
+                        <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                            <h4 class="font-bold text-amber-700 text-sm mb-1.5">Esfera vs. Cilindro</h4>
+                            <p class="text-xs text-slate-600 leading-relaxed">
+                                La <strong class="text-slate-900">esfera</strong> posee la menor área superficial posible para un volumen dado, siendo la forma térmicamente más eficiente. Sin embargo, es difícil de moldear. Por ello, en la industria predominan las <strong class="text-slate-900">mazarotas cilíndricas</strong> con relaciones óptimas como <span class="font-mono font-bold text-slate-900">d = h</span> o <span class="font-mono font-bold text-slate-900">h = 1.5d</span>.
+                            </p>
+                        </div>
+                        <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                            <h4 class="font-bold text-sky-700 text-sm mb-1.5">Transferencia: 2 Bases vs. 1 Base</h4>
+                            <p class="text-xs text-slate-600 leading-relaxed">
+                                Si la mazarota se modela aislada (<strong class="text-slate-900">Completa - 2 bases</strong>), pierde calor por el manto y ambas tapas. Si está montada directamente sobre la pieza (<strong class="text-slate-900">Superior - 1 base</strong>), la cara inferior está en contacto con metal líquido y no transfiere calor al molde, por lo que se descuenta del área superficial.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SUBSECCIÓN 2.3: FORMULARIO -->
+            <div id="teoria-formulario" class="hidden space-y-6">
+                <div class="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-sm overflow-x-auto">
+                    <h3 class="text-xl font-extrabold text-amber-600 mb-4 flex items-center gap-2.5">
+                        <i class="fa-solid fa-square-root-variable"></i>
+                        <span>Ecuaciones y Despejes Implementados</span>
+                    </h3>
+
+                    <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                        <thead>
+                            <tr class="border-b-2 border-slate-200 text-slate-500 font-mono text-[11px] uppercase bg-slate-50">
+                                <th class="py-3 px-3">Geometría / Condición</th>
+                                <th class="py-3 px-3">Volumen (V)</th>
+                                <th class="py-3 px-3">Área (A)</th>
+                                <th class="py-3 px-3">Despeje (Modo 2, M = V/A)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-200 font-mono text-slate-700">
+                            <tr class="hover:bg-slate-50">
+                                <td class="py-3.5 px-3 font-sans font-bold text-slate-900">Esfera</td>
+                                <td class="py-3.5 px-3">π · d³ / 6</td>
+                                <td class="py-3.5 px-3">π · d²</td>
+                                <td class="py-3.5 px-3 font-bold text-amber-700">d = 6 · M</td>
+                            </tr>
+                            <tr class="hover:bg-slate-50">
+                                <td class="py-3.5 px-3 font-sans font-bold text-slate-900">Cilindro (2 bases, k = d/h)</td>
+                                <td class="py-3.5 px-3">π · d² · h / 4</td>
+                                <td class="py-3.5 px-3">π·d²/2 + π·d·h</td>
+                                <td class="py-3.5 px-3 font-bold text-amber-700">d = M · (2k + 4) ; h = d/k</td>
+                            </tr>
+                            <tr class="hover:bg-slate-50">
+                                <td class="py-3.5 px-3 font-sans font-bold text-slate-900">Cilindro (1 base, k = d/h)</td>
+                                <td class="py-3.5 px-3">π · d² · h / 4</td>
+                                <td class="py-3.5 px-3">π·d²/4 + π·d·h</td>
+                                <td class="py-3.5 px-3 font-bold text-amber-700">d = M · (k + 4) ; h = d/k</td>
+                            </tr>
+                            <tr class="hover:bg-slate-50">
+                                <td class="py-3.5 px-3 font-sans font-bold text-slate-900">Cilindro Manual (d dado)</td>
+                                <td class="py-3.5 px-3">π · d² · h / 4</td>
+                                <td class="py-3.5 px-3">N·π·d²/4 + π·d·h</td>
+                                <td class="py-3.5 px-3 font-bold text-sky-700">h = (N·M·d) / (d - 4M) , d &gt; 4M</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p class="text-[11px] text-slate-500 mt-4 font-sans">
+                        * Donde <strong>N = 2</strong> para mazarota completa (2 bases) y <strong>N = 1</strong> para mazarota superior (1 base). Cuando el usuario trabaja en pulgadas (<code>in</code>), la constante <code>C</code> se convierte internamente a <code>cm</code> mediante <code>C_cm = C_in / (2.54)^n</code> para garantizar coherencia dimensional absoluta.
+                    </p>
+                </div>
+            </div>
+
+            <div class="mt-8 text-center">
+                <button type="button" onclick="cambiarSeccion('simulador')"
+                    class="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-extrabold text-sm shadow-md shadow-amber-500/25 hover:from-amber-400 hover:to-orange-400 transition-all">
+                    <i class="fa-solid fa-cube"></i>
+                    <span>Ir al Simulador 3D</span>
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- =========================================================
+         SECCIÓN 3: SIMULADOR 3D
+    ========================================================== -->
+    <section id="seccion-simulador" class="tab-pane hidden flex-1 flex flex-col lg:h-[calc(100vh-120px)] lg:overflow-hidden bg-slate-50">
+        <!-- Barra secundaria del simulador -->
+        <div class="bg-white border-b border-slate-200 px-4 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-2 shrink-0">
+            <div class="flex items-center gap-2 text-xs font-mono text-slate-600">
+                <span class="text-amber-600 font-bold">T<sub>s</sub></span>
+                <span>=</span>
+                <span>C · (V / A)<sup>n</sup></span>
+                <span class="hidden sm:inline text-slate-300 mx-1">•</span>
+                <span class="hidden sm:inline text-slate-500 font-sans">Cálculo en tiempo real</span>
+            </div>
+
+            <!-- Selector rápido de unidades -->
+            <div class="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
+                <button type="button" id="unit-cm" onclick="setUnidad('cm')" class="px-3 py-1 rounded-lg bg-amber-500 text-white shadow-sm transition-all">
+                    cm (SI)
+                </button>
+                <button type="button" id="unit-in" onclick="setUnidad('in')" class="px-3 py-1 rounded-lg text-slate-600 hover:text-slate-900 transition-all">
+                    in (US)
+                </button>
+            </div>
+        </div>
+
+        <!-- CUERPO DEL SIMULADOR -->
+        <div class="flex-1 flex flex-col lg:flex-row lg:overflow-hidden">
+
+            <!-- PANEL IZQUIERDO: PARÁMETROS -->
+            <aside class="w-full lg:w-[400px] xl:w-[430px] bg-white border-b lg:border-b-0 lg:border-r border-slate-200 flex flex-col shrink-0 lg:overflow-y-auto">
+                <div class="p-5 space-y-5">
+
+                    <!-- 1. MODO DE OPERACIÓN -->
+                    <div>
+                        <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
+                            <i class="fa-solid fa-sliders text-amber-600 mr-1.5"></i>Modo de Simulación
+                        </label>
+                        <div class="grid grid-cols-2 gap-2 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
+                            <button type="button" id="mode-1" onclick="setEjercicio('1')" class="py-2.5 px-3 rounded-lg text-xs font-bold transition-all bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-sm flex items-center justify-center gap-1.5">
+                                <i class="fa-regular fa-clock"></i>
+                                <span>Calcular T<sub>s</sub></span>
+                            </button>
+                            <button type="button" id="mode-2" onclick="setEjercicio('2')" class="py-2.5 px-3 rounded-lg text-xs font-semibold transition-all text-slate-600 hover:text-slate-900 hover:bg-white flex items-center justify-center gap-1.5">
+                                <i class="fa-solid fa-compass-drafting"></i>
+                                <span>Dimensionar</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 2. CONSTANTES DEL MOLDE -->
+                    <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3.5">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-slate-800 flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                                Parámetros del Molde
+                            </span>
+                            <span class="text-[10px] font-mono text-slate-400">Chvorinov</span>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-[11px] font-medium text-slate-600 mb-1">Constante (C)</label>
+                                <div class="relative">
+                                    <input type="number" id="const-c" value="2.5" step="0.1" min="0.01"
+                                        class="w-full bg-white border border-slate-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 rounded-xl pl-3 pr-16 py-2 text-sm font-mono text-slate-900 outline-none transition-all">
+                                    <span id="badge-c" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">min/cm²</span>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-medium text-slate-600 mb-1">Exponente (n)</label>
+                                <div class="relative">
+                                    <input type="number" id="const-n" value="2" step="0.1" min="0.1"
+                                        class="w-full bg-white border border-slate-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 rounded-xl pl-3 pr-10 py-2 text-sm font-mono text-slate-900 outline-none transition-all">
+                                    <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">dim</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3. DATOS DE LA PIEZA (SOLO MODO 2) -->
+                    <div id="grupo-ejercicio-2" class="hidden bg-sky-50/70 border border-sky-200 rounded-2xl p-4 space-y-3.5">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-sky-900 flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-sky-500"></span>
+                                Datos de la Pieza a Alimentar
+                            </span>
+                            <span class="text-[10px] font-mono text-sky-700 font-semibold">T<sub>s,maz</sub> = Q · T<sub>s,p</sub></span>
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between items-center mb-1">
+                                <label class="text-[11px] font-medium text-slate-700">Factor de Seguridad (Q &gt; 1)</label>
+                                <span id="q-percent-label" class="text-[10px] font-mono font-bold text-sky-700">+25% tiempo extra</span>
+                            </div>
+                            <input type="number" id="factor-q" value="1.25" step="0.05" min="1.01"
+                                class="w-full bg-white border border-sky-300 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 rounded-xl px-3 py-2 text-sm font-mono text-slate-900 outline-none transition-all">
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-[11px] font-medium text-slate-700 mb-1">Volumen Pieza (V<sub>p</sub>)</label>
+                                <div class="relative">
+                                    <input type="number" id="vol-pieza" value="1000" step="10" min="0.1"
+                                        class="w-full bg-white border border-sky-300 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 rounded-xl pl-3 pr-11 py-2 text-sm font-mono text-slate-900 outline-none transition-all">
+                                    <span id="badge-vp" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">cm³</span>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-medium text-slate-700 mb-1">Área Pieza (A<sub>p</sub>)</label>
+                                <div class="relative">
+                                    <input type="number" id="area-pieza" value="600" step="10" min="0.1"
+                                        class="w-full bg-white border border-sky-300 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 rounded-xl pl-3 pr-11 py-2 text-sm font-mono text-slate-900 outline-none transition-all">
+                                    <span id="badge-ap" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">cm²</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 4. GEOMETRÍA DE LA MAZAROTA -->
+                    <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-4">
+                        <span class="text-xs font-bold text-slate-800 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                            Geometría de la Mazarota
+                        </span>
+
+                        <!-- Forma -->
+                        <div class="grid grid-cols-2 gap-2.5">
+                            <button type="button" id="shape-cilindro" onclick="setForma('cilindro')"
+                                class="p-3 rounded-xl border-2 border-amber-500 bg-amber-50 text-amber-800 font-bold text-xs flex flex-col items-center gap-1.5 transition-all shadow-sm">
+                                <i class="fa-solid fa-database text-base"></i>
+                                <span>Cilíndrica</span>
+                            </button>
+                            <button type="button" id="shape-esfera" onclick="setForma('esfera')"
+                                class="p-3 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:border-slate-300 font-semibold text-xs flex flex-col items-center gap-1.5 transition-all">
+                                <i class="fa-solid fa-circle text-base"></i>
+                                <span>Esférica</span>
+                            </button>
+                        </div>
+
+                        <!-- Condición de Superficie (Solo Cilindro) -->
+                        <div id="grupo-superficie">
+                            <label class="block text-[11px] font-medium text-slate-600 mb-1.5">Transferencia de Calor (Área)</label>
+                            <div class="grid grid-cols-2 gap-1.5 bg-slate-200/70 p-1 rounded-xl border border-slate-200 text-[11px]">
+                                <button type="button" id="surf-completa" onclick="setSuperficie('completa')" class="py-1.5 px-2 rounded-lg bg-white text-slate-900 font-bold shadow-sm transition-all">
+                                    Completa (2 bases)
+                                </button>
+                                <button type="button" id="surf-superior" onclick="setSuperficie('superior')" class="py-1.5 px-2 rounded-lg text-slate-600 hover:text-slate-900 font-medium transition-all">
+                                    Superior (1 base)
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Relación d/h (Solo Cilindro) -->
+                        <div id="grupo-relacion">
+                            <label class="block text-[11px] font-medium text-slate-600 mb-1.5">Relación de Aspecto (k = d / h)</label>
+                            <div class="grid grid-cols-3 gap-1.5" id="ratio-pills">
+                                <button type="button" data-val="1" onclick="setRelacion('1')" class="ratio-btn py-1.5 rounded-lg text-xs font-mono font-bold border border-amber-500 bg-amber-50 text-amber-800 shadow-sm transition-all">d = h</button>
+                                <button type="button" data-val="1.5" onclick="setRelacion('1.5')" class="ratio-btn py-1.5 rounded-lg text-xs font-mono border border-slate-200 bg-white text-slate-600 hover:text-slate-900 transition-all">d = 1.5h</button>
+                                <button type="button" data-val="2" onclick="setRelacion('2')" class="ratio-btn py-1.5 rounded-lg text-xs font-mono border border-slate-200 bg-white text-slate-600 hover:text-slate-900 transition-all">d = 2h</button>
+                                <button type="button" data-val="0.6666667" onclick="setRelacion('0.6666667')" class="ratio-btn py-1.5 rounded-lg text-xs font-mono border border-slate-200 bg-white text-slate-600 hover:text-slate-900 transition-all">h = 1.5d</button>
+                                <button type="button" data-val="0.5" onclick="setRelacion('0.5')" class="ratio-btn py-1.5 rounded-lg text-xs font-mono border border-slate-200 bg-white text-slate-600 hover:text-slate-900 transition-all">h = 2d</button>
+                                <button type="button" data-val="independiente" onclick="setRelacion('independiente')" class="ratio-btn py-1.5 rounded-lg text-xs font-semibold border border-slate-200 bg-white text-slate-600 hover:text-slate-900 transition-all">Manual</button>
+                            </div>
+                        </div>
+
+                        <!-- Dimensiones de entrada -->
+                        <div id="grupo-dimensiones" class="grid grid-cols-2 gap-3 pt-1">
+                            <div id="grupo-d" class="col-span-2">
+                                <label class="block text-[11px] font-medium text-slate-600 mb-1">Diámetro (d)</label>
+                                <div class="relative">
+                                    <input type="number" id="dim-d" value="10" step="0.5" min="0.1"
+                                        class="w-full bg-white border border-slate-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 rounded-xl pl-3 pr-11 py-2 text-sm font-mono text-slate-900 outline-none transition-all">
+                                    <span id="badge-d" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">cm</span>
+                                </div>
+                            </div>
+                            <div id="grupo-h" class="hidden">
+                                <label class="block text-[11px] font-medium text-slate-600 mb-1">Altura (h)</label>
+                                <div class="relative">
+                                    <input type="number" id="dim-h" value="10" step="0.5" min="0.1"
+                                        class="w-full bg-white border border-slate-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 rounded-xl pl-3 pr-11 py-2 text-sm font-mono text-slate-900 outline-none transition-all">
+                                    <span id="badge-h" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">cm</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- BOTÓN PRINCIPAL -->
+                    <button type="button" onclick="calcular(true)"
+                        class="w-full py-3.5 px-5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-extrabold text-sm tracking-wide shadow-md shadow-amber-500/25 transition-all transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-play"></i>
+                        <span>Ejecutar Simulación Térmica</span>
+                    </button>
+                </div>
+            </aside>
+
+            <!-- PANEL DERECHO: VISOR 3D + TELEMETRÍA -->
+            <div class="flex-1 flex flex-col min-w-0 lg:overflow-hidden">
+
+                <!-- VISOR 3D INTERACTIVO -->
+                <div class="relative flex-1 min-h-[340px] lg:min-h-0 bg-cad-grid overflow-hidden">
+                    <div id="visor-3d" class="w-full h-full cursor-grab active:cursor-grabbing"></div>
+
+                    <!-- HUD Superior Izquierdo -->
+                    <div class="absolute top-4 left-4 pointer-events-none flex flex-col gap-1.5">
+                        <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/90 backdrop-blur-md border border-slate-200 text-xs font-semibold text-slate-800 shadow-sm">
+                            <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                            <span id="hud-titulo">Mazarota Cilíndrica</span>
+                            <span class="text-slate-300">|</span>
+                            <span id="hud-cotas" class="font-mono font-bold text-amber-700">d: 10.00 • h: 10.00 cm</span>
+                        </div>
+                    </div>
+
+                    <!-- Controles Flotantes del Visor 3D -->
+                    <div class="absolute top-4 right-4 flex items-center gap-1.5 bg-white/90 backdrop-blur-md p-1.5 rounded-xl border border-slate-200 shadow-sm">
+                        <button type="button" id="mat-molten" onclick="setMaterialMode('molten')" title="Metal Fundido"
+                            class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300 transition-all">
+                            <i class="fa-solid fa-fire mr-1"></i>Fundido
+                        </button>
+                        <button type="button" id="mat-solid" onclick="setMaterialMode('solid')" title="Acero Sólido"
+                            class="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all">
+                            <i class="fa-solid fa-cube mr-1"></i>Sólido
+                        </button>
+                        <button type="button" id="mat-wire" onclick="setMaterialMode('wire')" title="Malla CAD"
+                            class="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all">
+                            <i class="fa-solid fa-border-all mr-1"></i>CAD
+                        </button>
+                        <div class="w-px h-5 bg-slate-200 mx-0.5"></div>
+                        <button type="button" id="btn-autorotate" onclick="toggleAutoRotate()" title="Pausar/Reanudar rotación"
+                            class="w-7 h-7 rounded-lg text-amber-600 bg-amber-50 hover:bg-amber-100 border border-amber-200 flex items-center justify-center text-xs transition-all">
+                            <i class="fa-solid fa-rotate"></i>
+                        </button>
+                        <button type="button" onclick="resetCamera()" title="Centrar cámara"
+                            class="w-7 h-7 rounded-lg text-slate-600 bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-xs transition-all">
+                            <i class="fa-solid fa-crosshairs"></i>
+                        </button>
+                    </div>
+
+                    <!-- Pista de interacción -->
+                    <div class="absolute bottom-3 left-4 pointer-events-none hidden sm:flex items-center gap-2 text-[11px] font-mono text-slate-600 bg-white/85 px-2.5 py-1 rounded-lg border border-slate-200 shadow-sm">
+                        <i class="fa-solid fa-computer-mouse text-slate-500"></i>
+                        <span>Arrastra para rotar • Rueda para zoom</span>
+                    </div>
+                </div>
+
+                <!-- PANEL INFERIOR: RESULTADOS Y TELEMETRÍA -->
+                <div id="panel-resultados" class="bg-white border-t border-slate-200 p-4 sm:p-5 shrink-0 lg:max-h-[44%] lg:overflow-y-auto">
+                    <div id="error-banner" class="hidden mb-4 p-3.5 rounded-xl bg-rose-50 border border-rose-300 text-rose-800 text-xs sm:text-sm flex items-start gap-3">
+                        <i class="fa-solid fa-triangle-exclamation text-rose-600 mt-0.5"></i>
+                        <span id="error-text"></span>
+                    </div>
+
+                    <!-- Grid de 4 Tarjetas KPI -->
+                    <div id="kpi-grid" class="grid grid-cols-2 xl:grid-cols-4 gap-3 mb-4">
+                        <div id="card-ts" class="bg-gradient-to-br from-amber-50 to-orange-50/50 border border-amber-300 rounded-2xl p-3.5 shadow-sm">
+                            <div class="flex items-center justify-between text-[11px] font-bold text-amber-800 uppercase tracking-wider">
+                                <span>T<sub>s</sub> Mazarota</span>
+                                <i class="fa-solid fa-stopwatch text-amber-600"></i>
+                            </div>
+                            <div id="res-ts" class="text-2xl sm:text-3xl font-extrabold font-mono text-slate-900 mt-1.5 leading-none">--</div>
+                            <div id="res-ts-sub" class="text-[11px] text-slate-600 mt-1.5 font-mono">minutos</div>
+                        </div>
+
+                        <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3.5">
+                            <div class="flex items-center justify-between text-[11px] font-bold text-sky-700 uppercase tracking-wider">
+                                <span>Módulo (V/A)</span>
+                                <i class="fa-solid fa-ruler-combined text-sky-600"></i>
+                            </div>
+                            <div id="res-mod" class="text-xl sm:text-2xl font-extrabold font-mono text-slate-900 mt-1.5 leading-none">--</div>
+                            <div id="res-mod-sub" class="text-[11px] text-slate-500 mt-1.5 font-mono">equiv. cm</div>
+                        </div>
+
+                        <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3.5">
+                            <div class="flex items-center justify-between text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                                <span>Dimensiones</span>
+                                <i class="fa-solid fa-arrows-up-down-left-right text-slate-500"></i>
+                            </div>
+                            <div id="res-dim" class="text-lg sm:text-xl font-extrabold font-mono text-slate-900 mt-1.5 leading-tight">--</div>
+                            <div id="res-dim-sub" class="text-[11px] text-slate-500 mt-1.5 font-mono">geometría final</div>
+                        </div>
+
+                        <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3.5">
+                            <div class="flex items-center justify-between text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                                <span>Volumen & Área</span>
+                                <i class="fa-solid fa-cube text-slate-500"></i>
+                            </div>
+                            <div id="res-vol" class="text-sm sm:text-base font-bold font-mono text-slate-900 mt-1.5 leading-snug">--</div>
+                            <div id="res-area" class="text-xs font-mono text-slate-500 mt-1">--</div>
+                        </div>
+                    </div>
+
+                    <!-- Barra Comparativa (Solo Modo 2) -->
+                    <div id="comparativa-box" class="hidden mb-3.5 bg-slate-50 border border-slate-200 rounded-xl p-3">
+                        <div class="flex flex-wrap items-center justify-between gap-2 text-xs mb-2">
+                            <span class="font-bold text-slate-800">
+                                <i class="fa-solid fa-chart-simple text-sky-600 mr-1.5"></i>Comparativa de Solidificación
+                            </span>
+                            <span id="comp-label" class="font-mono text-[11px] font-bold text-sky-700"></span>
+                        </div>
+                        <div class="space-y-2">
+                            <div>
+                                <div class="flex justify-between text-[11px] font-mono text-slate-600 mb-0.5">
+                                    <span>Pieza (T<sub>s,p</sub>)</span>
+                                    <span id="bar-pieza-val">-- min</span>
+                                </div>
+                                <div class="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                                    <div id="bar-pieza" class="h-full bg-sky-500 rounded-full transition-all duration-500" style="width: 70%;"></div>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-[11px] font-mono font-bold text-amber-700 mb-0.5">
+                                    <span>Mazarota (T<sub>s,maz</sub> = Q · T<sub>s,p</sub>)</span>
+                                    <span id="bar-maz-val">-- min</span>
+                                </div>
+                                <div class="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                                    <div class="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full w-full"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Desglose Matemático -->
+                    <div id="formula-box" class="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-mono text-xs text-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div id="res-formula" class="break-words leading-relaxed"></div>
+                        <span id="res-badge" class="shrink-0 self-start sm:self-center px-2.5 py-1 rounded-lg bg-emerald-100 border border-emerald-300 text-emerald-800 text-[11px] font-bold">
+                            VÁLIDO
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- =========================================================
+         SECCIÓN 4: MANUAL DE USO
+    ========================================================== -->
+    <section id="seccion-manual" class="tab-pane hidden flex-1 bg-slate-50 py-10 px-4 sm:px-6">
+        <div class="max-w-5xl mx-auto">
+            <!-- Cabecera del Manual -->
+            <div class="text-center mb-10">
+                <span class="inline-block px-3 py-1 rounded-full bg-sky-100 border border-sky-200 text-sky-800 text-[11px] font-mono font-bold uppercase tracking-widest mb-3">
+                    Guía Interactiva Paso a Paso
+                </span>
+                <h2 class="text-2xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+                    Manual de Uso del <span class="text-amber-600">Simulador</span>
+                </h2>
+                <p class="text-slate-600 text-sm mt-2 max-w-2xl mx-auto">
+                    Aprende a configurar cada parámetro, aprovechar el visor 3D e interpretar los resultados térmicos y geométricos sin cometer errores.
+                </p>
+            </div>
+
+            <!-- Nota de cálculo en tiempo real -->
+            <div class="mb-8 p-4 rounded-2xl bg-amber-50 border border-amber-300 flex items-start gap-3.5 text-xs sm:text-sm text-amber-950 shadow-sm">
+                <i class="fa-solid fa-bolt text-amber-600 text-lg mt-0.5"></i>
+                <div>
+                    <strong class="text-amber-800 block mb-0.5">Actualización Automática en Tiempo Real</strong>
+                    No necesitas hacer clic en "Ejecutar Simulación Térmica" cada vez que cambies un número: el simulador recalcula las ecuaciones y actualiza el modelo 3D al instante mientras escribes. El botón principal sirve para forzar el recálculo y resaltar visualmente el resultado final.
+                </div>
+            </div>
+
+            <!-- Timeline de 6 Pasos -->
+            <div class="space-y-5">
+
+                <!-- Paso 1 -->
+                <div class="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row gap-4 shadow-sm">
+                    <div class="w-11 h-11 rounded-xl bg-amber-500 text-white font-mono font-extrabold text-lg flex items-center justify-center shrink-0 shadow-sm">01</div>
+                    <div class="space-y-2">
+                        <h3 class="text-base sm:text-lg font-extrabold text-slate-900">Selecciona el Sistema de Unidades (<span class="font-mono text-amber-600">cm</span> o <span class="font-mono text-amber-600">in</span>)</h3>
+                        <p class="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                            En la esquina superior derecha del simulador encontrarás los botones <span class="font-mono bg-amber-100 px-1.5 py-0.5 rounded text-amber-800 font-bold">cm (SI)</span> y <span class="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-800 font-bold">in (US)</span>. Al cambiar de sistema, todas las etiquetas de entrada (constante <code class="text-amber-700 font-bold">C</code>, volumen, área, diámetro y altura) se actualizan automáticamente.
+                        </p>
+                        <p class="text-xs text-slate-500">
+                            <strong>Consejo:</strong> Asegúrate de ingresar la constante del molde <code class="text-slate-900 font-bold">C</code> en el mismo sistema que seleccionaste (por ejemplo, si eliges pulgadas, ingresa <code>C</code> en <code>min/in²</code>).
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Paso 2 -->
+                <div class="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row gap-4 shadow-sm">
+                    <div class="w-11 h-11 rounded-xl bg-amber-500 text-white font-mono font-extrabold text-lg flex items-center justify-center shrink-0 shadow-sm">02</div>
+                    <div class="space-y-2">
+                        <h3 class="text-base sm:text-lg font-extrabold text-slate-900">Elige el Modo de Simulación</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                            <div class="bg-amber-50/60 border border-amber-200 rounded-xl p-3.5">
+                                <span class="text-xs font-bold text-amber-800 block mb-1"><i class="fa-regular fa-clock mr-1"></i>Modo 1: Calcular T<sub>s</sub></span>
+                                <p class="text-xs text-slate-700 leading-relaxed">
+                                    Úsalo cuando <strong>ya conoces las dimensiones</strong> de la mazarota (diámetro y altura) y deseas averiguar cuánto tiempo tardará en solidificar.
+                                </p>
+                            </div>
+                            <div class="bg-sky-50/70 border border-sky-200 rounded-xl p-3.5">
+                                <span class="text-xs font-bold text-sky-800 block mb-1"><i class="fa-solid fa-compass-drafting mr-1"></i>Modo 2: Dimensionar</span>
+                                <p class="text-xs text-slate-700 leading-relaxed">
+                                    Úsalo cuando tienes una <strong>pieza colada</strong> (conoces su volumen <code class="text-slate-900 font-bold">Vp</code> y área <code class="text-slate-900 font-bold">Ap</code>) y necesitas diseñar el tamaño exacto de la mazarota usando un factor de seguridad <code class="text-slate-900 font-bold">Q &gt; 1</code>.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Paso 3 -->
+                <div class="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row gap-4 shadow-sm">
+                    <div class="w-11 h-11 rounded-xl bg-amber-500 text-white font-mono font-extrabold text-lg flex items-center justify-center shrink-0 shadow-sm">03</div>
+                    <div class="space-y-2">
+                        <h3 class="text-base sm:text-lg font-extrabold text-slate-900">Ingresa los Parámetros del Molde y de la Pieza</h3>
+                        <ul class="text-xs sm:text-sm text-slate-600 space-y-1.5 list-disc pl-5">
+                            <li><strong class="text-slate-900">Constante del Molde (C):</strong> Valor experimental que depende del metal y del material del molde (arena verde, coquilla, etc.). Debe ser mayor a 0.</li>
+                            <li><strong class="text-slate-900">Exponente (n):</strong> Por defecto es <code class="text-amber-700 font-bold">2</code> (valor estándar de Chvorinov), pero puedes modificarlo si tu problema especifica otro exponente (ej. 1.8 o 1.9).</li>
+                            <li><strong class="text-slate-900">Solo en Modo 2 (Panel azul):</strong> Ingresa el <strong>Factor Q</strong> (ej. <code>1.25</code> significa que la mazarota solidificará un 25% más lento que la pieza), el <strong>Volumen (Vp)</strong> y el <strong>Área Superficial (Ap)</strong> de la pieza.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Paso 4 -->
+                <div class="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row gap-4 shadow-sm">
+                    <div class="w-11 h-11 rounded-xl bg-amber-500 text-white font-mono font-extrabold text-lg flex items-center justify-center shrink-0 shadow-sm">04</div>
+                    <div class="space-y-2">
+                        <h3 class="text-base sm:text-lg font-extrabold text-slate-900">Configura la Geometría de la Mazarota</h3>
+                        <ul class="text-xs sm:text-sm text-slate-600 space-y-1.5 list-disc pl-5">
+                            <li><strong class="text-slate-900">Forma:</strong> Elige entre <em>Cilíndrica</em> o <em>Esférica</em>.</li>
+                            <li><strong class="text-slate-900">Transferencia de Calor (solo cilindro):</strong> Selecciona <em>Completa (2 bases)</em> si la mazarota enfría por todas sus caras, o <em>Superior (1 base)</em> si está apoyada sobre la pieza y la base inferior no transfiere calor al molde.</li>
+                            <li><strong class="text-slate-900">Relación de Aspecto (k = d/h):</strong> Elige una proporción estándar (<code>d = h</code>, <code>d = 1.5h</code>, <code>h = 1.5d</code>, etc.) o selecciona <strong>Manual</strong> para ingresar diámetro y altura libres en Modo 1, o fijar un diámetro para despejar la altura en Modo 2.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Paso 5 -->
+                <div class="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row gap-4 shadow-sm">
+                    <div class="w-11 h-11 rounded-xl bg-amber-500 text-white font-mono font-extrabold text-lg flex items-center justify-center shrink-0 shadow-sm">05</div>
+                    <div class="space-y-2">
+                        <h3 class="text-base sm:text-lg font-extrabold text-slate-900">Explora el Visor 3D Interactivo</h3>
+                        <p class="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                            La geometría 3D refleja las proporciones exactas entre diámetro y altura. Puedes interactuar libremente con ella:
+                        </p>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1 text-xs text-slate-600">
+                            <div class="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                                <strong class="text-amber-700 block mb-0.5"><i class="fa-solid fa-computer-mouse mr-1"></i>Cámara Libre</strong>
+                                Arrastra con clic izquierdo para rotar 360° y usa la rueda del mouse para acercar o alejar.
+                            </div>
+                            <div class="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                                <strong class="text-sky-700 block mb-0.5"><i class="fa-solid fa-fire mr-1"></i>Modos Visuales</strong>
+                                Alterna entre <em>Fundido</em> (incandescente), <em>Sólido</em> (acero) y <em>CAD</em> (malla wireframe).
+                            </div>
+                            <div class="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                                <strong class="text-slate-800 block mb-0.5"><i class="fa-solid fa-crosshairs mr-1"></i>Utilidades</strong>
+                                Usa los botones de la esquina superior derecha para pausar la rotación o recentrar la cámara.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Paso 6 -->
+                <div class="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row gap-4 shadow-sm">
+                    <div class="w-11 h-11 rounded-xl bg-amber-500 text-white font-mono font-extrabold text-lg flex items-center justify-center shrink-0 shadow-sm">06</div>
+                    <div class="space-y-2">
+                        <h3 class="text-base sm:text-lg font-extrabold text-slate-900">Interpreta la Telemetría y Soluciona Errores</h3>
+                        <p class="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                            En la zona inferior verás 4 tarjetas KPI (<strong class="text-amber-700">T<sub>s</sub> Mazarota</strong>, <strong class="text-sky-700">Módulo V/A</strong>, <strong class="text-slate-900">Dimensiones</strong> y <strong class="text-slate-900">Volumen & Área</strong>), el desglose matemático paso a paso y, en Modo 2, una barra comparativa entre el tiempo de la pieza y el de la mazarota.
+                        </p>
+                        <div class="mt-2 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-900">
+                            <strong class="text-rose-700"><i class="fa-solid fa-triangle-exclamation mr-1"></i>¿Por qué aparece el error "diámetro demasiado pequeño" en Modo 2 Manual?</strong><br>
+                            Matemáticamente, para un cilindro infinito el módulo máximo posible es <code>d / 4</code>. Si el diámetro que ingresas manualmente cumple <code>d ≤ 4 · M_requerido</code>, ninguna altura positiva logrará el tiempo deseado. El simulador te indicará el diámetro mínimo exacto que debes superar.
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="mt-10 text-center">
+                <button type="button" onclick="cambiarSeccion('simulador')"
+                    class="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-extrabold text-sm shadow-md shadow-amber-500/25 hover:from-amber-400 hover:to-orange-400 transition-all">
+                    <i class="fa-solid fa-play"></i>
+                    <span>Probar el Simulador Ahora</span>
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- =========================================================
+         PIE DE PÁGINA CONSTANTE
+    ========================================================== -->
+    <footer class="bg-white border-t border-slate-200 px-4 sm:px-6 py-3.5 shrink-0 z-20">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2 text-xs text-slate-600 text-center md:text-left">
+            <div class="flex items-center gap-2">
+                <!-- Emblema Mini SimuMetalurgia: Cuchara vertiendo -->
+                <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 shrink-0">
+                    <rect x="2" y="2" width="60" height="60" rx="15" fill="#0f172a" stroke="#d97706" stroke-width="2.5"/>
+                    <ellipse cx="42" cy="52" rx="9" ry="2.2" fill="#f59e0b"/>
+                    <path d="M36.5 29.5 C40.5 31 42.8 36 42.5 51.5" stroke="#f59e0b" stroke-width="4.5" stroke-linecap="round"/>
+                    <path d="M36.5 29.5 C40.2 31.2 42.3 36.2 42.2 51.2" stroke="#fef08a" stroke-width="1.8" stroke-linecap="round"/>
+                    <g transform="rotate(34 26 26)">
+                        <ellipse cx="26" cy="14" rx="11.5" ry="3.8" fill="#ea580c"/>
+                        <ellipse cx="26" cy="14.5" rx="8.5" ry="2.2" fill="#fef08a"/>
+                        <path d="M14.5 14 L16.8 36 C17 38.2 21 39.8 26 39.8 C31 39.8 35 38.2 35.2 36 L37.5 14 Z" fill="#94a3b8"/>
+                        <circle cx="26" cy="26" r="2.8" fill="#0f172a" stroke="#f59e0b" stroke-width="1.5"/>
+                    </g>
+                </svg>
+                <span class="font-extrabold text-slate-900">SimuMetalurgia</span>
+            </div>
+            <div class="leading-relaxed">
+                <strong class="text-slate-800">Creadores:</strong> Indira Rodriguez Velasques &amp; Andrés Felipe Caro Miranda
+                <span class="text-slate-300 mx-1.5">|</span>
+                <strong class="text-slate-800">Profesores:</strong> Prof: Carlos Andrés Galán Pinilla &amp; Ana Emilse Coy Echeverria
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // =========================================================
+        // NAVEGACIÓN PRINCIPAL (4 SECCIONES) Y SUB-PESTAÑAS TEORÍA
+        // =========================================================
+        function cambiarSeccion(seccionId) {
+            const secciones = ['inicio', 'teoria', 'simulador', 'manual'];
+            const activeClass = "px-3.5 py-2 rounded-lg text-xs sm:text-sm bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold shadow-sm transition-all flex items-center gap-1.5";
+            const inactiveClass = "px-3.5 py-2 rounded-lg text-xs sm:text-sm text-slate-600 hover:text-slate-900 hover:bg-white font-medium transition-all flex items-center gap-1.5";
+
+            secciones.forEach(id => {
+                const el = document.getElementById(`seccion-${id}`);
+                const btn = document.getElementById(`nav-${id}`);
+                if (id === seccionId) {
+                    el.classList.remove('hidden');
+                    btn.className = activeClass;
+                } else {
+                    el.classList.add('hidden');
+                    btn.className = inactiveClass;
+                }
+            });
+
+            // Reajustar tamaño del visor 3D al mostrar el simulador
+            if (seccionId === 'simulador') {
+                setTimeout(() => {
+                    if (container && camera && renderer) {
+                        const nw = container.clientWidth;
+                        const nh = container.clientHeight;
+                        if (nw > 0 && nh > 0) {
+                            camera.aspect = nw / nh;
+                            camera.updateProjectionMatrix();
+                            renderer.setSize(nw, nh);
+                        }
+                    }
+                }, 50);
+            }
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function cambiarSubTeoria(subId) {
+            const subs = ['fundamentos', 'mazarotas', 'formulario'];
+            const active = "flex-1 min-w-[140px] py-2.5 px-4 rounded-xl text-xs font-bold bg-amber-500 text-white shadow-sm transition-all";
+            const inactive = "flex-1 min-w-[140px] py-2.5 px-4 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all";
+            subs.forEach(id => {
+                document.getElementById(`teoria-${id}`).classList.toggle('hidden', id !== subId);
+                document.getElementById(`subtab-${id}`).className = id === subId ? active : inactive;
+            });
+        }
+
+        // =========================================================
+        // MOTOR DEL SIMULADOR
+        // =========================================================
+        const state = {
+            ejercicio: '1',
+            unidad: 'cm',
+            forma: 'cilindro',
+            superficie: 'completa',
+            relacion: '1',
+            materialMode: 'molten',
+            autoRotate: true
+        };
+
+        const inputC = document.getElementById('const-c');
+        const inputN = document.getElementById('const-n');
+        const inputQ = document.getElementById('factor-q');
+        const inputVp = document.getElementById('vol-pieza');
+        const inputAp = document.getElementById('area-pieza');
+        const inputD = document.getElementById('dim-d');
+        const inputH = document.getElementById('dim-h');
+
+        function setEjercicio(val) {
+            state.ejercicio = val;
+            const btn1 = document.getElementById('mode-1');
+            const btn2 = document.getElementById('mode-2');
+            const active = "py-2.5 px-3 rounded-lg text-xs font-bold transition-all bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-sm flex items-center justify-center gap-1.5";
+            const inactive = "py-2.5 px-3 rounded-lg text-xs font-semibold transition-all text-slate-600 hover:text-slate-900 hover:bg-white flex items-center justify-center gap-1.5";
+            btn1.className = val === '1' ? active : inactive;
+            btn2.className = val === '2' ? active : inactive;
+            actualizarInterfaz();
+            calcular();
+        }
+
+        function setUnidad(u) {
+            state.unidad = u;
+            const bCm = document.getElementById('unit-cm');
+            const bIn = document.getElementById('unit-in');
+            const active = "px-3 py-1 rounded-lg bg-amber-500 text-white shadow-sm transition-all";
+            const inactive = "px-3 py-1 rounded-lg text-slate-600 hover:text-slate-900 transition-all";
+            bCm.className = u === 'cm' ? active : inactive;
+            bIn.className = u === 'in' ? active : inactive;
+            actualizarInterfaz();
+            calcular();
+        }
+
+        function setForma(f) {
+            state.forma = f;
+            const bCil = document.getElementById('shape-cilindro');
+            const bEsf = document.getElementById('shape-esfera');
+            const active = "p-3 rounded-xl border-2 border-amber-500 bg-amber-50 text-amber-800 font-bold text-xs flex flex-col items-center gap-1.5 transition-all shadow-sm";
+            const inactive = "p-3 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:border-slate-300 font-semibold text-xs flex flex-col items-center gap-1.5 transition-all";
+            bCil.className = f === 'cilindro' ? active : inactive;
+            bEsf.className = f === 'esfera' ? active : inactive;
+            actualizarInterfaz();
+            calcular();
+        }
+
+        function setSuperficie(s) {
+            state.superficie = s;
+            const bComp = document.getElementById('surf-completa');
+            const bSup = document.getElementById('surf-superior');
+            const active = "py-1.5 px-2 rounded-lg bg-white text-slate-900 font-bold shadow-sm transition-all";
+            const inactive = "py-1.5 px-2 rounded-lg text-slate-600 hover:text-slate-900 font-medium transition-all";
+            bComp.className = s === 'completa' ? active : inactive;
+            bSup.className = s === 'superior' ? active : inactive;
+            calcular();
+        }
+
+        function setRelacion(r) {
+            state.relacion = r;
+            document.querySelectorAll('.ratio-btn').forEach(btn => {
+                if (btn.dataset.val === r) {
+                    btn.className = "ratio-btn py-1.5 rounded-lg text-xs font-mono font-bold border border-amber-500 bg-amber-50 text-amber-800 shadow-sm transition-all";
+                } else {
+                    btn.className = "ratio-btn py-1.5 rounded-lg text-xs font-mono border border-slate-200 bg-white text-slate-600 hover:text-slate-900 transition-all";
+                }
+            });
+            actualizarInterfaz();
+            calcular();
+        }
+
+        function actualizarInterfaz() {
+            const u = state.unidad;
+            const nVal = parseFloat(inputN.value) || 2;
+            const nSup = nVal === 2 ? '²' : `^${nVal}`;
+            document.getElementById('badge-c').textContent = `min/${u}${nSup}`;
+            document.getElementById('badge-vp').textContent = `${u}³`;
+            document.getElementById('badge-ap').textContent = `${u}²`;
+            document.getElementById('badge-d').textContent = u;
+            document.getElementById('badge-h').textContent = u;
+
+            const qVal = parseFloat(inputQ.value);
+            if (!isNaN(qVal) && qVal > 1) {
+                document.getElementById('q-percent-label').textContent = `+${((qVal - 1) * 100).toFixed(0)}% tiempo extra`;
+            }
+
+            const grupoEj2 = document.getElementById('grupo-ejercicio-2');
+            const grupoRel = document.getElementById('grupo-relacion');
+            const grupoSurf = document.getElementById('grupo-superficie');
+            const grupoDims = document.getElementById('grupo-dimensiones');
+            const grupoD = document.getElementById('grupo-d');
+            const grupoH = document.getElementById('grupo-h');
+
+            grupoEj2.classList.toggle('hidden', state.ejercicio !== '2');
+
+            const isEsfera = state.forma === 'esfera';
+            grupoRel.classList.toggle('hidden', isEsfera);
+            grupoSurf.classList.toggle('hidden', isEsfera);
+
+            if (state.ejercicio === '1') {
+                grupoDims.classList.remove('hidden');
+                grupoD.classList.remove('hidden');
+                if (!isEsfera && state.relacion === 'independiente') {
+                    grupoH.classList.remove('hidden');
+                    grupoD.classList.remove('col-span-2');
+                } else {
+                    grupoH.classList.add('hidden');
+                    grupoD.classList.add('col-span-2');
+                }
+            } else {
+                if (!isEsfera && state.relacion === 'independiente') {
+                    grupoDims.classList.remove('hidden');
+                    grupoD.classList.remove('hidden');
+                    grupoD.classList.add('col-span-2');
+                    grupoH.classList.add('hidden');
+                } else {
+                    grupoDims.classList.add('hidden');
+                }
+            }
+        }
+
+        [inputC, inputN, inputQ, inputVp, inputAp, inputD, inputH].forEach(el => {
+            el.addEventListener('input', () => {
+                actualizarInterfaz();
+                calcular(false);
+            });
+        });
+
+        // --- MOTOR 3D (THREE.JS + ORBITCONTROLS) ---
+        let scene, camera, renderer, controls, mesh, wireframeOverlay, gridHelper;
+        let lastGeom = { forma: 'cilindro', d: 10, h: 10 };
+        const container = document.getElementById('visor-3d');
+
+        function init3D() {
+            scene = new THREE.Scene();
+
+            const w = container.clientWidth || 600;
+            const h = container.clientHeight || 400;
+
+            camera = new THREE.PerspectiveCamera(42, w / h, 0.1, 1000);
+            camera.position.set(22, 18, 28);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.setSize(w, h);
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.1;
+            container.appendChild(renderer.domElement);
+
+            if (typeof THREE.OrbitControls !== 'undefined') {
+                controls = new THREE.OrbitControls(camera, renderer.domElement);
+                controls.enableDamping = true;
+                controls.dampingFactor = 0.06;
+                controls.autoRotate = state.autoRotate;
+                controls.autoRotateSpeed = 1.6;
+                controls.minDistance = 12;
+                controls.maxDistance = 80;
+            }
+
+            // Iluminación optimizada para estudio claro
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
+            scene.add(ambientLight);
+
+            const keyLight = new THREE.DirectionalLight(0xfff7ed, 1.3);
+            keyLight.position.set(18, 28, 20);
+            scene.add(keyLight);
+
+            const rimLight = new THREE.DirectionalLight(0xbae6fd, 0.9);
+            rimLight.position.set(-20, 14, -18);
+            scene.add(rimLight);
+
+            const fillLight = new THREE.PointLight(0xf59e0b, 0.65, 60);
+            fillLight.position.set(0, -10, 10);
+            scene.add(fillLight);
+
+            // Grilla CAD clara
+            gridHelper = new THREE.GridHelper(36, 18, 0xd97706, 0xcbd5e1);
+            gridHelper.position.y = -9;
+            gridHelper.material.opacity = 0.65;
+            gridHelper.material.transparent = true;
+            scene.add(gridHelper);
+
+            const resizeObserver = new ResizeObserver(() => {
+                const nw = container.clientWidth;
+                const nh = container.clientHeight;
+                if (nw > 0 && nh > 0) {
+                    camera.aspect = nw / nh;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(nw, nh);
+                }
+            });
+            resizeObserver.observe(container);
+
+            animate();
+        }
+
+        function getMaterial() {
+            if (state.materialMode === 'molten') {
+                return new THREE.MeshStandardMaterial({
+                    color: 0xea580c,
+                    emissive: 0x9a3412,
+                    emissiveIntensity: 0.35,
+                    metalness: 0.45,
+                    roughness: 0.25
+                });
+            } else if (state.materialMode === 'solid') {
+                return new THREE.MeshStandardMaterial({
+                    color: 0x64748b,
+                    metalness: 0.72,
+                    roughness: 0.25
+                });
+            } else {
+                return new THREE.MeshStandardMaterial({
+                    color: 0x0284c7,
+                    wireframe: true
+                });
+            }
+        }
+
+        function crearMalla(forma, d, h) {
+            if (!d || !h || d <= 0 || h <= 0 || !isFinite(d) || !isFinite(h)) return;
+            lastGeom = { forma, d, h };
+
+            if (mesh) {
+                scene.remove(mesh);
+                mesh.geometry.dispose();
+                mesh.material.dispose();
+            }
+
+            let geometry;
+            if (forma === 'esfera') {
+                geometry = new THREE.SphereGeometry(d / 2, 48, 48);
+            } else {
+                geometry = new THREE.CylinderGeometry(d / 2, d / 2, h, 48, 1);
+            }
+
+            const material = getMaterial();
+            mesh = new THREE.Mesh(geometry, material);
+
+            const maxDim = Math.max(d, h);
+            const scale = 15 / maxDim;
+            mesh.scale.set(scale, scale, scale);
+
+            const scaledHeight = (forma === 'esfera' ? d : h) * scale;
+            mesh.position.y = -9 + (scaledHeight / 2) + 0.4;
+
+            if (state.materialMode !== 'wire') {
+                const edges = new THREE.EdgesGeometry(geometry, 25);
+                const lineMat = new THREE.LineBasicMaterial({
+                    color: state.materialMode === 'molten' ? 0x7c2d12 : 0x1e293b,
+                    transparent: true,
+                    opacity: 0.25
+                });
+                wireframeOverlay = new THREE.LineSegments(edges, lineMat);
+                mesh.add(wireframeOverlay);
+            }
+
+            scene.add(mesh);
+        }
+
+        function setMaterialMode(mode) {
+            state.materialMode = mode;
+            ['molten', 'solid', 'wire'].forEach(m => {
+                const btn = document.getElementById(`mat-${m}`);
+                if (m === mode) {
+                    btn.className = "px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300 transition-all";
+                } else {
+                    btn.className = "px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all";
+                }
+            });
+            crearMalla(lastGeom.forma, lastGeom.d, lastGeom.h);
+        }
+
+        function toggleAutoRotate() {
+            state.autoRotate = !state.autoRotate;
+            if (controls) controls.autoRotate = state.autoRotate;
+            const btn = document.getElementById('btn-autorotate');
+            btn.className = state.autoRotate
+                ? "w-7 h-7 rounded-lg text-amber-600 bg-amber-50 hover:bg-amber-100 border border-amber-200 flex items-center justify-center text-xs transition-all"
+                : "w-7 h-7 rounded-lg text-slate-400 bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-xs transition-all";
+        }
+
+        function resetCamera() {
+            camera.position.set(22, 18, 28);
+            if (controls) {
+                controls.target.set(0, 0, 0);
+                controls.update();
+            } else {
+                camera.lookAt(0, 0, 0);
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if (controls) {
+                controls.update();
+            } else if (mesh && state.autoRotate) {
+                mesh.rotation.y += 0.008;
+            }
+            renderer.render(scene, camera);
+        }
+
+        // --- MOTOR MATEMÁTICO ---
+        function mostrarError(msg) {
+            document.getElementById('error-banner').classList.remove('hidden');
+            document.getElementById('error-text').textContent = msg;
+            document.getElementById('res-badge').textContent = 'ERROR';
+            document.getElementById('res-badge').className = "shrink-0 self-start sm:self-center px-2.5 py-1 rounded-lg bg-rose-100 border border-rose-300 text-rose-800 text-[11px] font-bold";
+        }
+
+        function limpiarError() {
+            document.getElementById('error-banner').classList.add('hidden');
+            document.getElementById('res-badge').textContent = 'VÁLIDO';
+            document.getElementById('res-badge').className = "shrink-0 self-start sm:self-center px-2.5 py-1 rounded-lg bg-emerald-100 border border-emerald-300 text-emerald-800 text-[11px] font-bold";
+        }
+
+        function calcular(animar = false) {
+            const ej = state.ejercicio;
+            const u = state.unidad;
+            const forma = state.forma;
+            const relacion = state.relacion;
+            const surf = state.superficie;
+
+            const C_input = parseFloat(inputC.value);
+            const n = parseFloat(inputN.value);
+
+            if (isNaN(C_input) || C_input <= 0 || isNaN(n) || n <= 0) {
+                mostrarError("Ingrese valores numéricos válidos y mayores a cero para la constante C y el exponente n.");
+                return;
+            }
+
+            const uFactor = (u === 'in') ? 2.54 : 1;
+            const C_cm = C_input / Math.pow(uFactor, n);
+
+            let d_cm = 0, h_cm = 0, V_cm3 = 0, A_cm2 = 0, mod_cm = 0, Ts = 0;
+            let formulaHTML = "";
+            const compBox = document.getElementById('comparativa-box');
+
+            if (ej === '1') {
+                compBox.classList.add('hidden');
+                const d_in = parseFloat(inputD.value);
+                if (isNaN(d_in) || d_in <= 0) {
+                    mostrarError("Ingrese un diámetro válido mayor a cero.");
+                    return;
+                }
+
+                d_cm = d_in * uFactor;
+                h_cm = d_cm;
+
+                if (forma === 'cilindro') {
+                    if (relacion === 'independiente') {
+                        const h_in = parseFloat(inputH.value);
+                        if (isNaN(h_in) || h_in <= 0) {
+                            mostrarError("Ingrese una altura válida mayor a cero.");
+                            return;
+                        }
+                        h_cm = h_in * uFactor;
+                    } else {
+                        h_cm = d_cm / parseFloat(relacion);
+                    }
+                }
+
+                const r = d_cm / 2;
+                if (forma === 'esfera') {
+                    V_cm3 = (4 / 3) * Math.PI * Math.pow(r, 3);
+                    A_cm2 = 4 * Math.PI * Math.pow(r, 2);
+                } else {
+                    const numBases = (surf === 'completa') ? 2 : 1;
+                    V_cm3 = Math.PI * Math.pow(r, 2) * h_cm;
+                    A_cm2 = numBases * Math.PI * Math.pow(r, 2) + 2 * Math.PI * r * h_cm;
+                }
+
+                mod_cm = V_cm3 / A_cm2;
+                const mod_u = mod_cm / uFactor;
+                Ts = C_cm * Math.pow(mod_cm, n);
+
+                formulaHTML = `<span class="text-amber-700 font-bold">T<sub>s</sub></span> = ${C_input} · (${mod_u.toFixed(4)} ${u})<sup>${n}</sup> = <span class="text-slate-900 font-extrabold">${Ts.toFixed(2)} min</span>`;
+            } else {
+                const Q = parseFloat(inputQ.value);
+                const Vp_in = parseFloat(inputVp.value);
+                const Ap_in = parseFloat(inputAp.value);
+
+                if (isNaN(Q) || Q <= 1 || isNaN(Vp_in) || Vp_in <= 0 || isNaN(Ap_in) || Ap_in <= 0) {
+                    mostrarError("Verifique que el factor Q sea mayor a 1 y que el Volumen (Vp) y Área (Ap) de la pieza sean mayores a cero.");
+                    return;
+                }
+
+                const Vp_cm3 = Vp_in * Math.pow(uFactor, 3);
+                const Ap_cm2 = Ap_in * Math.pow(uFactor, 2);
+                const modPieza_cm = Vp_cm3 / Ap_cm2;
+                const TsPieza = C_cm * Math.pow(modPieza_cm, n);
+                Ts = Q * TsPieza;
+                mod_cm = Math.pow(Ts / C_cm, 1 / n);
+
+                if (forma === 'esfera') {
+                    d_cm = 6 * mod_cm;
+                    h_cm = d_cm;
+                    const r = d_cm / 2;
+                    V_cm3 = (4 / 3) * Math.PI * Math.pow(r, 3);
+                    A_cm2 = 4 * Math.PI * Math.pow(r, 2);
+                } else {
+                    const numBases = (surf === 'completa') ? 2 : 1;
+                    if (relacion !== 'independiente') {
+                        const k = parseFloat(relacion);
+                        d_cm = mod_cm * ((numBases * k) + 4);
+                        h_cm = d_cm / k;
+                    } else {
+                        const d_in = parseFloat(inputD.value);
+                        if (isNaN(d_in) || d_in <= 0) {
+                            mostrarError("Ingrese un diámetro válido mayor a cero para despejar la altura.");
+                            return;
+                        }
+                        d_cm = d_in * uFactor;
+                        if (d_cm / 4 <= mod_cm) {
+                            const dMin_u = (4 * mod_cm) / uFactor;
+                            mostrarError(`El diámetro elegido (${d_in} ${u}) es demasiado pequeño para alcanzar el módulo requerido. Debe ser estrictamente mayor a ${dMin_u.toFixed(2)} ${u}.`);
+                            return;
+                        }
+                        h_cm = (numBases * mod_cm * d_cm) / (d_cm - 4 * mod_cm);
+                    }
+                    const r = d_cm / 2;
+                    V_cm3 = Math.PI * Math.pow(r, 2) * h_cm;
+                    A_cm2 = numBases * Math.PI * Math.pow(r, 2) + 2 * Math.PI * r * h_cm;
+                }
+
+                compBox.classList.remove('hidden');
+                const pctPieza = Math.min(100, (TsPieza / Ts) * 100);
+                document.getElementById('bar-pieza').style.width = `${pctPieza.toFixed(1)}%`;
+                document.getElementById('bar-pieza-val').textContent = `${TsPieza.toFixed(2)} min`;
+                document.getElementById('bar-maz-val').textContent = `${Ts.toFixed(2)} min`;
+                document.getElementById('comp-label').textContent = `Q = ${Q.toFixed(2)} • Margen: +${(Ts - TsPieza).toFixed(2)} min`;
+
+                formulaHTML = `<span class="text-sky-700 font-bold">T<sub>s,p</sub></span> = ${TsPieza.toFixed(2)} min → <span class="text-amber-700 font-bold">T<sub>s,maz</sub></span> = ${Q} · ${TsPieza.toFixed(2)} = <span class="text-slate-900 font-extrabold">${Ts.toFixed(2)} min</span> (M<sub>req</sub> = ${(mod_cm / uFactor).toFixed(4)} ${u})`;
+            }
+
+            limpiarError();
+
+            const d_u = d_cm / uFactor;
+            const h_u = h_cm / uFactor;
+            const mod_u = mod_cm / uFactor;
+            const V_u = V_cm3 / Math.pow(uFactor, 3);
+            const A_u = A_cm2 / Math.pow(uFactor, 2);
+
+            document.getElementById('res-ts').textContent = `${Ts.toFixed(2)} min`;
+            document.getElementById('res-ts-sub').textContent = `${(Ts * 60).toFixed(0)} segundos totales`;
+
+            document.getElementById('res-mod').textContent = `${mod_u.toFixed(4)} ${u}`;
+            document.getElementById('res-mod-sub').textContent = u === 'in' ? `${mod_cm.toFixed(4)} cm (SI)` : `razón geométrica V/A`;
+
+            if (forma === 'esfera') {
+                document.getElementById('res-dim').textContent = `d = ${d_u.toFixed(2)} ${u}`;
+                document.getElementById('res-dim-sub').textContent = `radio r = ${(d_u / 2).toFixed(2)} ${u}`;
+                document.getElementById('hud-titulo').textContent = 'Mazarota Esférica';
+                document.getElementById('hud-cotas').textContent = `d: ${d_u.toFixed(2)} ${u}`;
+            } else {
+                document.getElementById('res-dim').textContent = `d:${d_u.toFixed(2)} | h:${h_u.toFixed(2)} ${u}`;
+                document.getElementById('res-dim-sub').textContent = `relación d/h = ${(d_u / h_u).toFixed(2)} • ${surf === 'completa' ? '2 bases' : '1 base'}`;
+                document.getElementById('hud-titulo').textContent = 'Mazarota Cilíndrica';
+                document.getElementById('hud-cotas').textContent = `d: ${d_u.toFixed(2)} • h: ${h_u.toFixed(2)} ${u}`;
+            }
+
+            document.getElementById('res-vol').textContent = `V = ${V_u.toFixed(1)} ${u}³`;
+            document.getElementById('res-area').textContent = `A = ${A_u.toFixed(1)} ${u}²`;
+            document.getElementById('res-formula').innerHTML = formulaHTML;
+
+            if (animar) {
+                const cardTs = document.getElementById('card-ts');
+                cardTs.classList.remove('glow-active');
+                void cardTs.offsetWidth;
+                cardTs.classList.add('glow-active');
+            }
+
+            crearMalla(forma, d_cm, h_cm);
+        }
+
+        // Inicialización
+        init3D();
+        actualizarInterfaz();
+        calcular();
+    </script>
+</body>
+</html>
